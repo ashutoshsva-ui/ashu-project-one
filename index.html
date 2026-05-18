@@ -1129,10 +1129,12 @@
 
     async function sendDonationNotification(payload) {
       try {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => formData.append(key, value));
         const res = await fetch(FORM_SUBMIT_AJAX_ENDPOINT, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify(payload)
+          headers: { "Accept": "application/json" },
+          body: formData
         });
         const data = await res.json();
         if (res.ok && (data.success === "true" || data.success === true)) return "ajax";
@@ -1150,18 +1152,41 @@
       const message = document.getElementById("mMessage").value.trim();
 
       if (!name || !contact) {
-        showToast("⚠️ Ashu needs your name and contact to accept this graciously.");
+        showToast("\u26a0\ufe0f Ashu needs your name and contact to accept this graciously.");
         return;
       }
 
       const submitBtn = document.querySelector(".modal-submit");
-      submitBtn.textContent = "Sending... 📨";
+      submitBtn.textContent = "Sending... \ud83d\udce8";
       submitBtn.disabled = true;
 
       const notificationPayload = buildContributionPayload(name, contact, message);
       await sendDonationNotification(notificationPayload);
 
-      submitBtn.textContent = "💸 Confirm Contribution";
+      // Guaranteed mailto: backup — fires regardless of FormSubmit activation status
+      // so Ashu always gets notified even if FormSubmit hasn't been activated yet
+      try {
+        const mailSubject = encodeURIComponent(notificationPayload._subject);
+        const mailBody = encodeURIComponent(
+          "Donation Details\n" +
+          "================\n" +
+          "Name: " + name + "\n" +
+          "Contact: " + contact + "\n" +
+          "Product: " + currentProduct.name + "\n" +
+          "Amount: " + currentProduct.price + "\n" +
+          "Message: " + (message || "\u2014 no message \u2014") + "\n" +
+          "Submitted At: " + notificationPayload["Submitted At"]
+        );
+        const a = document.createElement("a");
+        a.href = "mailto:" + DONATION_EMAIL + "?subject=" + mailSubject + "&body=" + mailBody;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (e) {
+        console.warn("mailto: backup failed:", e);
+      }
+
+      submitBtn.textContent = "\ud83d\udcb8 Confirm Contribution";
       submitBtn.disabled = false;
       closeModal();
       const old = balance;
