@@ -1070,16 +1070,21 @@
     // ===================================================
     // SUBMIT CONTRIBUTION
     // ===================================================
-    const DONATION_EMAIL = "workforashuu@gmail.com";
-    const FORM_SUBMIT_AJAX_ENDPOINT = "https://formsubmit.co/ajax/" + DONATION_EMAIL;
-    const FORM_SUBMIT_FALLBACK_ENDPOINT = "https://formsubmit.co/" + DONATION_EMAIL;
+    // Web3Forms free form email service.
+    // Replace this placeholder with your Web3Forms access key.
+    const WEB3FORMS_ACCESS_KEY = "e4347ca8-146c-42a8-bd93-8415c31c2a5b";
+    const WEB3FORMS_ENDPOINT = "https://api.web3forms.com/submit";
+
+    function isValidEmail(value) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    }
 
     function buildContributionPayload(name, contact, message) {
-      return {
-        _subject  : "💸 Luxury Donation Alert — " + currentProduct.name + " (" + currentProduct.price + ")",
-        _template : "table",
-        _captcha  : "false",
-        _next     : window.location.href.split("#")[0] + "#products",
+      const payload = {
+        access_key : WEB3FORMS_ACCESS_KEY,
+        subject    : "💸 Luxury Donation Alert — " + currentProduct.name + " (" + currentProduct.price + ")",
+        from_name  : "Ashu Garib Fund Website",
+        botcheck   : "",
         "Notification Type" : "Luxury donation",
         "Name"    : name,
         "Contact" : contact,
@@ -1092,58 +1097,28 @@
           timeStyle: "medium"
         })
       };
-    }
 
-    function submitNotificationFallback(payload) {
-      return new Promise(resolve => {
-        const frameName = "donationNotificationFrame" + Date.now();
-        const iframe = document.createElement("iframe");
-        iframe.name = frameName;
-        iframe.style.display = "none";
-        document.body.appendChild(iframe);
+      if (isValidEmail(contact)) {
+        payload.email = contact;
+      }
 
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = FORM_SUBMIT_FALLBACK_ENDPOINT;
-        form.target = frameName;
-        form.style.display = "none";
-
-        Object.entries(payload).forEach(([key, value]) => {
-          const input = document.createElement("input");
-          input.type = "hidden";
-          input.name = key;
-          input.value = value;
-          form.appendChild(input);
-        });
-
-        document.body.appendChild(form);
-        form.submit();
-
-        setTimeout(() => {
-          form.remove();
-          iframe.remove();
-          resolve();
-        }, 1200);
-      });
+      return payload;
     }
 
     async function sendDonationNotification(payload) {
-      try {
-        const formData = new FormData();
-        Object.entries(payload).forEach(([key, value]) => formData.append(key, value));
-        const res = await fetch(FORM_SUBMIT_AJAX_ENDPOINT, {
-          method: "POST",
-          headers: { "Accept": "application/json" },
-          body: formData
-        });
-        const data = await res.json();
-        if (res.ok && (data.success === "true" || data.success === true)) return "ajax";
-        throw new Error("FormSubmit AJAX did not confirm delivery");
-      } catch (err) {
-        console.warn("FormSubmit AJAX error; using fallback form submit:", err);
-        await submitNotificationFallback(payload);
-        return "fallback";
+      if (!WEB3FORMS_ACCESS_KEY || WEB3FORMS_ACCESS_KEY === "PASTE_YOUR_WEB3FORMS_ACCESS_KEY_HERE") {
+        throw new Error("Missing Web3Forms access key");
       }
+
+      const res = await fetch(WEB3FORMS_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success === true) return "web3forms";
+      throw new Error(data.message || "Web3Forms did not confirm delivery");
     }
 
     async function submitContribution() {
@@ -1152,41 +1127,18 @@
       const message = document.getElementById("mMessage").value.trim();
 
       if (!name || !contact) {
-        showToast("\u26a0\ufe0f Ashu needs your name and contact to accept this graciously.");
+        showToast("⚠️ Ashu needs your name and contact to accept this graciously.");
         return;
       }
 
       const submitBtn = document.querySelector(".modal-submit");
-      submitBtn.textContent = "Sending... \ud83d\udce8";
+      submitBtn.textContent = "Sending... 📨";
       submitBtn.disabled = true;
 
       const notificationPayload = buildContributionPayload(name, contact, message);
       await sendDonationNotification(notificationPayload);
 
-      // Guaranteed mailto: backup — fires regardless of FormSubmit activation status
-      // so Ashu always gets notified even if FormSubmit hasn't been activated yet
-      try {
-        const mailSubject = encodeURIComponent(notificationPayload._subject);
-        const mailBody = encodeURIComponent(
-          "Donation Details\n" +
-          "================\n" +
-          "Name: " + name + "\n" +
-          "Contact: " + contact + "\n" +
-          "Product: " + currentProduct.name + "\n" +
-          "Amount: " + currentProduct.price + "\n" +
-          "Message: " + (message || "\u2014 no message \u2014") + "\n" +
-          "Submitted At: " + notificationPayload["Submitted At"]
-        );
-        const a = document.createElement("a");
-        a.href = "mailto:" + DONATION_EMAIL + "?subject=" + mailSubject + "&body=" + mailBody;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } catch (e) {
-        console.warn("mailto: backup failed:", e);
-      }
-
-      submitBtn.textContent = "\ud83d\udcb8 Confirm Contribution";
+      submitBtn.textContent = "💸 Confirm Contribution";
       submitBtn.disabled = false;
       closeModal();
       const old = balance;
